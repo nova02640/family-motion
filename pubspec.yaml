@@ -1,0 +1,29 @@
+name: family_motion
+description: 亲子体感运动APP - 会纠正动作的亲子体感教练
+version: 1.0.0
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+  flutter_svg: ^2.0.0
+  provider: ^6.0.0
+  shared_preferences: ^2.2.0
+  flutter_animator: ^3.0.0
+  percent_indicator: ^4.2.2
+  charts_flutter: ^0.12.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icons/
+    - assets/images/
+    - assets/data/
