@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
+import '../assessment/assessment_screen.dart';
+import '../parent/parent_control_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -161,10 +163,17 @@ class ProfileScreen extends StatelessWidget {
                 children: [
                   ListTile(
                     leading: const Icon(Icons.bar_chart, color: Color(0xFF6366F1)),
-                    title: const Text('体能报告'),
-                    subtitle: const Text('查看详细体能测评结果'),
+                    title: const Text('体能测评'),
+                    subtitle: const Text('6项游戏化体能测试'),
                     trailing: const Icon(Icons.arrow_forward_ios, color: Colors.grey),
-                    onTap: () {},
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AssessmentScreen(),
+                        ),
+                      );
+                    },
                   ),
                   const Divider(height: 1),
                   ListTile(
@@ -173,6 +182,21 @@ class ProfileScreen extends StatelessWidget {
                     subtitle: const Text('查看所有运动记录'),
                     trailing: const Icon(Icons.arrow_forward_ios, color: Colors.grey),
                     onTap: () {},
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.person, color: Color(0xFF6366F1)),
+                    title: const Text('家长控制'),
+                    subtitle: const Text('查看数据、设置时长限制'),
+                    trailing: const Icon(Icons.arrow_forward_ios, color: Colors.grey),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ParentControlScreen(),
+                        ),
+                      );
+                    },
                   ),
                   const Divider(height: 1),
                   ListTile(
@@ -244,6 +268,45 @@ class ProfileScreen extends StatelessWidget {
                         ),
                       ),
                       child: const Text('立即开通'),
+                    ),
+                  ],
+                ),
+              ),
+            if (appProvider.isPremium)
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.all(16),
+                child: const Row(
+                  children: [
+                    Text(
+                      '⭐',
+                      style: TextStyle(fontSize: 32),
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '您已是会员',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            '已解锁全部游戏和专属功能',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),

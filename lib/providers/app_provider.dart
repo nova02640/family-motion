@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../models/plan.dart';
 import '../models/child_profile.dart';
 import '../models/achievement.dart';
+import '../services/plan_recommendation_service.dart';
 
 class AppProvider extends ChangeNotifier {
   ChildProfile _childProfile = ChildProfile(
@@ -34,6 +35,7 @@ class AppProvider extends ChangeNotifier {
 
   void updateChildProfile(ChildProfile profile) {
     _childProfile = profile;
+    refreshTodayPlan();
     notifyListeners();
   }
 
@@ -41,6 +43,11 @@ class AppProvider extends ChangeNotifier {
     _todayPlan.isCompleted = true;
     _streakDays++;
     _weekMinutes += _todayPlan.duration;
+    
+    if (_streakDays >= 7 && !_achievements[1].unlocked) {
+      unlockAchievement('2');
+    }
+    
     notifyListeners();
   }
 
@@ -56,7 +63,20 @@ class AppProvider extends ChangeNotifier {
   }
 
   void refreshTodayPlan() {
-    _todayPlan = Plan.generateTodayPlan();
+    _todayPlan = PlanRecommendationService.generatePersonalizedPlan(
+      _childProfile,
+      _streakDays,
+      _weekMinutes,
+    );
+    notifyListeners();
+  }
+
+  void resetDay() {
+    _todayPlan = PlanRecommendationService.generatePersonalizedPlan(
+      _childProfile,
+      _streakDays,
+      _weekMinutes,
+    );
     notifyListeners();
   }
 }

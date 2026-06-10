@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 class AssessmentResultScreen extends StatelessWidget {
@@ -5,7 +7,7 @@ class AssessmentResultScreen extends StatelessWidget {
 
   const AssessmentResultScreen({super.key, required this.scores});
 
-  final List<String> dimensions = [
+  final List<String> dimensions = const [
     '反应速度',
     '动作准确度',
     '爆发力',
@@ -97,10 +99,11 @@ class AssessmentResultScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    Container(
+                    SizedBox(
                       height: 200,
                       child: CustomPaint(
                         painter: RadarChartPainter(scores),
+                        size: const Size(200, 200),
                       ),
                     ),
                   ],
@@ -145,7 +148,9 @@ class AssessmentResultScreen extends StatelessWidget {
                                 child: LinearProgressIndicator(
                                   value: score / 100,
                                   backgroundColor: const Color(0xFF333),
-                                  color: getGradeColor(score.toDouble()),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    getGradeColor(score.toDouble()),
+                                  ),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                               ),
@@ -174,7 +179,9 @@ class AssessmentResultScreen extends StatelessWidget {
                 children: [
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () => Navigator.pushNamed(context, '/'),
+                      onPressed: () {
+                        Navigator.of(context).popUntil((route) => route.isFirst);
+                      },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF6366F1),
                         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -195,10 +202,17 @@ class AssessmentResultScreen extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () {},
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('分享功能待接入'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                      },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF16213E),
-                        border: Border.all(color: const Color(0xFF6366F1)),
+                        side: const BorderSide(color: Color(0xFF6366F1)),
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -240,13 +254,14 @@ class RadarChartPainter extends CustomPainter {
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
 
+    // Draw concentric polygons (5 levels)
     for (int i = 1; i <= 5; i++) {
       double r = radius * i / 5;
       Path path = Path();
       for (int j = 0; j < 6; j++) {
-        double angle = (j * 2 * 3.1416 / 6) - 3.1416 / 2;
-        double x = centerX + r * 3.1416.cos(angle);
-        double y = centerY + r * 3.1416.sin(angle);
+        double angle = (j * 2 * math.pi / 6) - math.pi / 2;
+        double x = centerX + r * math.cos(angle);
+        double y = centerY + r * math.sin(angle);
         if (j == 0) {
           path.moveTo(x, y);
         } else {
@@ -257,24 +272,25 @@ class RadarChartPainter extends CustomPainter {
       canvas.drawPath(path, paint);
     }
 
+    // Draw axes
     for (int j = 0; j < 6; j++) {
-      double angle = (j * 2 * 3.1416 / 6) - 3.1416 / 2;
-      double x = centerX + radius * 3.1416.cos(angle);
-      double y = centerY + radius * 3.1416.sin(angle);
+      double angle = (j * 2 * math.pi / 6) - math.pi / 2;
+      double x = centerX + radius * math.cos(angle);
+      double y = centerY + radius * math.sin(angle);
       canvas.drawLine(Offset(centerX, centerY), Offset(x, y), paint);
     }
 
+    // Draw data polygon
     final dataPaint = Paint()
-      ..color = const Color(0xFF6366F1)
-      ..strokeWidth = 2
+      ..color = const Color(0xFF6366F1).withOpacity(0.3)
       ..style = PaintingStyle.fill;
 
     Path dataPath = Path();
     for (int j = 0; j < 6; j++) {
-      double angle = (j * 2 * 3.1416 / 6) - 3.1416 / 2;
+      double angle = (j * 2 * math.pi / 6) - math.pi / 2;
       double r = radius * scores[j] / 100;
-      double x = centerX + r * 3.1416.cos(angle);
-      double y = centerY + r * 3.1416.sin(angle);
+      double x = centerX + r * math.cos(angle);
+      double y = centerY + r * math.sin(angle);
       if (j == 0) {
         dataPath.moveTo(x, y);
       } else {
@@ -282,15 +298,33 @@ class RadarChartPainter extends CustomPainter {
       }
     }
     dataPath.close();
-    dataPaint.color = const Color(0xFF6366F1).withOpacity(0.3);
     canvas.drawPath(dataPath, dataPaint);
+
+    // Draw data outline
     dataPaint.color = const Color(0xFF6366F1);
     dataPaint.style = PaintingStyle.stroke;
+    dataPaint.strokeWidth = 2;
     canvas.drawPath(dataPath, dataPaint);
+
+    // Draw data points
+    final dotPaint = Paint()
+      ..color = const Color(0xFF6366F1)
+      ..style = PaintingStyle.fill;
+
+    for (int j = 0; j < 6; j++) {
+      double angle = (j * 2 * math.pi / 6) - math.pi / 2;
+      double r = radius * scores[j] / 100;
+      double x = centerX + r * math.cos(angle);
+      double y = centerY + r * math.sin(angle);
+      canvas.drawCircle(Offset(x, y), 4, dotPaint);
+    }
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return false;
+    if (oldDelegate is RadarChartPainter) {
+      return oldDelegate.scores != scores;
+    }
+    return true;
   }
 }
