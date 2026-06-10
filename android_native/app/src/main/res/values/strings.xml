@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">亲子运动</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">首页</string>
+    <string name="nav_exercise">运动</string>
+    <string name="nav_assessment">测评</string>
+    <string name="nav_profile">我的</string>
+
+    <!-- Home -->
+    <string name="today_plan">今日计划</string>
+    <string name="recommended_exercises">推荐运动</string>
+    <string name="scene_modes">场景模式</string>
+    <string name="start_exercise">开始运动</string>
+
+    <!-- Exercise -->
+    <string name="action_correct">动作很标准！</string>
+    <string name="action_tip">保持这个姿势</string>
+    <string name="complete_action">完成动作</string>
+    <string name="finish">完成</string>
+
+    <!-- Assessment -->
+    <string name="assessment_title">体能测评</string>
+    <string name="start_assessment">开始测评</string>
+    <string name="assessment_result">测评结果</string>
+
+    <!-- Profile -->
+    <string name="parent_control">家长控制</string>
+    <string name="exercise_history">运动历史</string>
+    <string name="settings">设置</string>
+
+    <!-- Permissions -->
+    <string name="camera_permission_required">需要相机权限才能进行动作识别</string>
+    <string name="grant_permission">授予权限</string>
+</resources>
