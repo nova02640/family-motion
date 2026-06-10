@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../models/assessment.dart';
+import 'assessment_result_screen.dart';
 
 class AssessmentScreen extends StatefulWidget {
   const AssessmentScreen({super.key});
@@ -15,6 +18,13 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
   int timeLeft = 0;
   int score = 0;
   Map<AssessmentType, int> scores = {};
+  Timer? _gameTimer;
+
+  @override
+  void dispose() {
+    _gameTimer?.cancel();
+    super.dispose();
+  }
 
   void startAssessment() {
     setState(() {
@@ -28,18 +38,20 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
 
   void _countdownTimer() {
     Future.delayed(const Duration(seconds: 1), () {
-      if (mounted && countdown > 0) {
+      if (!mounted) return;
+      if (countdown > 0) {
         setState(() => countdown--);
         _countdownTimer();
-      } else if (mounted && countdown == 0) {
+      } else {
         _startGameLoop();
       }
     });
   }
 
   void _startGameLoop() {
+    _gameTimer?.cancel();
     const interval = Duration(milliseconds: 500);
-    Timer.periodic(interval, (timer) {
+    _gameTimer = Timer.periodic(interval, (timer) {
       if (!mounted || !isPlaying) {
         timer.cancel();
         return;
@@ -75,15 +87,17 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
         ? scores.values.reduce((a, b) => a + b) ~/ scores.length
         : 0;
 
+    // 将 Map<AssessmentType, int> 转换为按 AssessmentType 顺序排列的 List<int>
+    List<int> orderedScores = AssessmentType.values.map((type) => scores[type] ?? 0).toList();
+
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (context) => AssessmentResultScreen(
-          scores: scores,
-          totalScore: totalScore,
-        ),
+        builder: (context) => AssessmentResultScreen(scores: orderedScores),
       ),
     );
+    // totalScore 当前未在新结果页使用，但保留以备后续扩展
+    debugPrint('体能测评完成，总分: $totalScore');
   }
 
   @override
@@ -227,7 +241,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
                     ),
                     const SizedBox(height: 20),
                     Text(
-                      '剩余时间: $timeLefts',
+                      '剩余时间: ${timeLeft}s',
                       style: const TextStyle(fontSize: 24, color: Colors.grey),
                     ),
                     const SizedBox(height: 20),
@@ -287,297 +301,4 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
       ),
     );
   }
-
-  String get timeLefts => timeLeft.toString();
 }
-
-import 'dart:async';
-
-class AssessmentResultScreen extends StatelessWidget {
-  final Map<AssessmentType, int> scores;
-  final int totalScore;
-
-  const AssessmentResultScreen({
-    super.key,
-    required this.scores,
-    required this.totalScore,
-  });
-
-  String _getLevel(int score) {
-    if (score >= 90) return '优秀';
-    if (score >= 80) return '良好';
-    if (score >= 70) return '中等';
-    if (score >= 60) return '及格';
-    return '需要加油';
-  }
-
-  Color _getLevelColor(int score) {
-    if (score >= 90) return Colors.green;
-    if (score >= 80) return Colors.blue;
-    if (score >= 70) return Colors.yellow;
-    if (score >= 60) return Colors.orange;
-    return Colors.red;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('测评结果'),
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(30),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                ),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Column(
-                children: [
-                  const Text(
-                    '🎉',
-                    style: TextStyle(fontSize: 64),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    totalScore.toString(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 64,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _getLevel(totalScore),
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.1),
-                    blurRadius: 4,
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  const Text(
-                    '各项能力得分',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: const [
-                      Expanded(child: _RadarChart()),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  GridView.count(
-                    shrinkWrap: true,
-                    crossAxisCount: 3,
-                    children: AssessmentType.values.map((type) {
-                      int score = scores[type] ?? 0;
-                      return Column(
-                        children: [
-                          Text(
-                            _getIcon(type),
-                            style: const TextStyle(fontSize: 28),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _getName(type),
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            score.toString(),
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: _getLevelColor(score),
-                            ),
-                          ),
-                        ],
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6366F1),
-                padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
-                ),
-              ),
-              child: const Text(
-                '返回首页',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _getIcon(AssessmentType type) {
-    switch (type) {
-      case AssessmentType.reaction:
-        return '🐡';
-      case AssessmentType.accuracy:
-        return '❤️';
-      case AssessmentType.power:
-        return '📦';
-      case AssessmentType.endurance:
-        return '🐹';
-      case AssessmentType.balance:
-        return '🏎️';
-      case AssessmentType.coordination:
-        return '👯';
-    }
-  }
-
-  String _getName(AssessmentType type) {
-    switch (type) {
-      case AssessmentType.reaction:
-        return '反应';
-      case AssessmentType.accuracy:
-        return '准确';
-      case AssessmentType.power:
-        return '爆发';
-      case AssessmentType.endurance:
-        return '耐力';
-      case AssessmentType.balance:
-        return '平衡';
-      case AssessmentType.coordination:
-        return '协调';
-    }
-  }
-}
-
-class _RadarChart extends StatelessWidget {
-  const _RadarChart();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 200,
-      height: 200,
-      child: CustomPaint(
-        painter: _RadarPainter(),
-      ),
-    );
-  }
-}
-
-class _RadarPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    double centerX = size.width / 2;
-    double centerY = size.height / 2;
-    double radius = size.width / 2 - 20;
-
-    Paint gridPaint = Paint()
-      ..color = Colors.grey[300]!
-      ..strokeWidth = 1
-      ..style = PaintingStyle.stroke;
-
-    for (int i = 1; i <= 5; i++) {
-      double r = radius * i / 5;
-      Path path = Path();
-      for (int j = 0; j < 6; j++) {
-        double angle = (j * 60 - 90) * (3.1415926 / 180);
-        double x = centerX + r * cos(angle);
-        double y = centerY + r * sin(angle);
-        if (j == 0) {
-          path.moveTo(x, y);
-        } else {
-          path.lineTo(x, y);
-        }
-      }
-      path.close();
-      canvas.drawPath(path, gridPaint);
-    }
-
-    for (int i = 0; i < 6; i++) {
-      double angle = (i * 60 - 90) * (3.1415926 / 180);
-      double x = centerX + radius * cos(angle);
-      double y = centerY + radius * sin(angle);
-      canvas.drawLine(
-        Offset(centerX, centerY),
-        Offset(x, y),
-        gridPaint,
-      );
-    }
-
-    List<int> mockScores = [85, 78, 90, 72, 82, 88];
-    Paint dataPaint = Paint()
-      ..color = const Color(0xFF6366F1)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.fill
-      ..color = const Color(0xFF6366F1).withOpacity(0.3);
-
-    Path dataPath = Path();
-    for (int i = 0; i < 6; i++) {
-      double angle = (i * 60 - 90) * (3.1415926 / 180);
-      double r = radius * (mockScores[i] / 100);
-      double x = centerX + r * cos(angle);
-      double y = centerY + r * sin(angle);
-      if (i == 0) {
-        dataPath.moveTo(x, y);
-      } else {
-        dataPath.lineTo(x, y);
-      }
-    }
-    dataPath.close();
-    canvas.drawPath(dataPath, dataPaint);
-
-    Paint borderPaint = Paint()
-      ..color = const Color(0xFF6366F1)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-    canvas.drawPath(dataPath, borderPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return false;
-  }
-
-  double cos(double angle) => math.cos(angle);
-  double sin(double angle) => math.sin(angle);
-}
-
-import 'dart:math' as math;

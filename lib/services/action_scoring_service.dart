@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../models/standard_action.dart';
 import '../models/pose_landmark.dart';
 
@@ -11,7 +13,7 @@ class ActionScoringService {
     double smoothnessScore = _calculateSmoothness(poseData);
 
     double totalScore = accuracyScore * 0.4 + completionScore * 0.3 + smoothnessScore * 0.3;
-    
+
     List<String> feedback = _generateFeedback(
       accuracyScore,
       completionScore,
@@ -43,7 +45,7 @@ class ActionScoringService {
     }
 
     if (constraintsChecked == 0) return 100;
-    
+
     double avgError = totalError / constraintsChecked;
     return 100 - avgError;
   }
@@ -73,7 +75,7 @@ class ActionScoringService {
 
   static double _calculateKneeAngle(PoseData poseData, bool isLeft) {
     var landmarks = poseData.landmarks;
-    
+
     var hip = landmarks.firstWhere(
       (l) => l.name == (isLeft ? '左髋' : '右髋'),
       orElse: () => PoseLandmark(id: 0, name: '', x: 0.5, y: 0.4, z: 0, visibility: 1),
@@ -92,7 +94,7 @@ class ActionScoringService {
 
   static double _calculateShoulderAngle(PoseData poseData, bool isLeft) {
     var landmarks = poseData.landmarks;
-    
+
     var shoulder = landmarks.firstWhere(
       (l) => l.name == (isLeft ? '左肩' : '右肩'),
       orElse: () => PoseLandmark(id: 0, name: '', x: isLeft ? 0.35 : 0.65, y: 0.35, z: 0, visibility: 1),
@@ -111,7 +113,7 @@ class ActionScoringService {
 
   static double _calculateElbowAngle(PoseData poseData) {
     var landmarks = poseData.landmarks;
-    
+
     var shoulder = landmarks.firstWhere(
       (l) => l.name == '左肩',
       orElse: () => PoseLandmark(id: 0, name: '', x: 0.35, y: 0.35, z: 0, visibility: 1),
@@ -130,7 +132,7 @@ class ActionScoringService {
 
   static double _calculateWaistAngle(PoseData poseData) {
     var landmarks = poseData.landmarks;
-    
+
     var shoulder = landmarks.firstWhere(
       (l) => l.name == '左肩',
       orElse: () => PoseLandmark(id: 0, name: '', x: 0.5, y: 0.35, z: 0, visibility: 1),
@@ -158,20 +160,20 @@ class ActionScoringService {
     double cbY = c.y - b.y;
 
     double dotProduct = abX * cbX + abY * cbY;
-    double magnitudeAB = sqrt(abX * abX + abY * abY);
-    double magnitudeCB = sqrt(cbX * cbX + cbY * cbY);
+    double magnitudeAB = math.sqrt(abX * abX + abY * abY);
+    double magnitudeCB = math.sqrt(cbX * cbX + cbY * cbY);
 
     if (magnitudeAB == 0 || magnitudeCB == 0) return 180;
 
     double cosAngle = dotProduct / (magnitudeAB * magnitudeCB);
     cosAngle = cosAngle.clamp(-1.0, 1.0);
-    
-    return (acos(cosAngle) * 180) / pi;
+
+    return (math.acos(cosAngle) * 180) / math.pi;
   }
 
   static double _calculateAngleError(double current, double min, double max) {
     if (current >= min && current <= max) return 0;
-    
+
     double error = current < min ? min - current : current - max;
     return error / (max - min) * 100;
   }
@@ -187,9 +189,9 @@ class ActionScoringService {
           (l) => l.name.contains(jointPos.joint),
           orElse: () => PoseLandmark(id: 0, name: '', x: 0.5, y: 0.5, z: 0, visibility: 1),
         );
-        
-        double distance = sqrt(
-          pow(landmark.x - jointPos.x, 2) + pow(landmark.y - jointPos.y, 2),
+
+        double distance = math.sqrt(
+          math.pow(landmark.x - jointPos.x, 2) + math.pow(landmark.y - jointPos.y, 2),
         );
         totalDistance += distance;
         pairsChecked++;
@@ -197,11 +199,11 @@ class ActionScoringService {
     }
 
     if (pairsChecked == 0) return 100;
-    
+
     double avgDistance = totalDistance / pairsChecked;
-    double maxDistance = sqrt(2);
-    
-    return max(0, 100 - (avgDistance / maxDistance) * 100);
+    double maxDistance = math.sqrt(2);
+
+    return math.max(0, 100 - (avgDistance / maxDistance) * 100);
   }
 
   static double _calculateSmoothness(PoseData poseData) {
@@ -236,14 +238,7 @@ class ActionScoringService {
 
     return feedback;
   }
-
-  static double sqrt(double value) => value >= 0 ? math.sqrt(value) : 0;
-  static double pow(double base, double exponent) => math.pow(base, exponent).toDouble();
-  static double acos(double value) => math.acos(value);
-  static double get pi => math.pi;
 }
-
-import 'dart:math' as math;
 
 class ScoreResult {
   final double totalScore;

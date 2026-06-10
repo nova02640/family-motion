@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../../models/duel_state.dart';
 import '../../models/standard_action.dart';
@@ -16,6 +19,7 @@ class _DuelScreenState extends State<DuelScreen> {
   DuelState? duelState;
   bool isDetectingPlayers = false;
   bool showPlayerDetection = false;
+  Timer? _gameTimer;
 
   final List<Map<String, dynamic>> modes = [
     {
@@ -41,6 +45,12 @@ class _DuelScreenState extends State<DuelScreen> {
     },
   ];
 
+  @override
+  void dispose() {
+    _gameTimer?.cancel();
+    super.dispose();
+  }
+
   void selectMode(DuelMode mode) {
     setState(() {
       selectedMode = mode;
@@ -54,6 +64,7 @@ class _DuelScreenState extends State<DuelScreen> {
     });
 
     Future.delayed(const Duration(seconds: 3), () {
+      if (!mounted) return;
       setState(() {
         isDetectingPlayers = false;
         startDuel();
@@ -82,30 +93,30 @@ class _DuelScreenState extends State<DuelScreen> {
     if (duelState?.status != DuelStatus.countingDown) return;
 
     Future.delayed(const Duration(seconds: 1), () {
-      if (mounted && duelState != null) {
-        if (duelState!.countdown > 1) {
-          setState(() {
-            duelState = duelState!.copyWith(
-              countdown: duelState!.countdown - 1,
-            );
-          });
-          startCountdown();
-        } else {
-          setState(() {
-            duelState = duelState!.copyWith(
-              status: DuelStatus.playing,
-              countdown: 0,
-            );
-          });
-          startGameLoop();
-        }
+      if (!mounted || duelState == null) return;
+      if (duelState!.countdown > 1) {
+        setState(() {
+          duelState = duelState!.copyWith(
+            countdown: duelState!.countdown - 1,
+          );
+        });
+        startCountdown();
+      } else {
+        setState(() {
+          duelState = duelState!.copyWith(
+            status: DuelStatus.playing,
+            countdown: 0,
+          );
+        });
+        startGameLoop();
       }
     });
   }
 
   void startGameLoop() {
+    _gameTimer?.cancel();
     const interval = Duration(milliseconds: 500);
-    Timer.periodic(interval, (timer) {
+    _gameTimer = Timer.periodic(interval, (timer) {
       if (!mounted || duelState == null || duelState!.status != DuelStatus.playing) {
         timer.cancel();
         return;
@@ -151,7 +162,7 @@ class _DuelScreenState extends State<DuelScreen> {
   PoseData _generateMockPose(bool isPlayerA) {
     double offset = isPlayerA ? -0.15 : 0.15;
     double time = DateTime.now().millisecond / 500;
-    double baseScore = 75 + (isPlayerA ? 10 : 5) + (sin(time) * 10);
+    double baseScore = 75 + (isPlayerA ? 10 : 5) + (math.sin(time) * 10);
 
     List<PoseLandmark> landmarks = [
       PoseLandmark(id: 0, name: '左肩', x: 0.5 + offset, y: 0.35, z: 0, visibility: 1),
@@ -160,8 +171,8 @@ class _DuelScreenState extends State<DuelScreen> {
       PoseLandmark(id: 3, name: '右肘', x: 0.6 + offset - (baseScore / 300), y: 0.5, z: 0, visibility: 1),
       PoseLandmark(id: 4, name: '左髋', x: 0.45 + offset, y: 0.55, z: 0, visibility: 1),
       PoseLandmark(id: 5, name: '右髋', x: 0.55 + offset, y: 0.55, z: 0, visibility: 1),
-      PoseLandmark(id: 6, name: '左膝', x: 0.45 + offset + (sin(time) * 0.08), y: 0.7 + (sin(time) * 0.15), z: 0, visibility: 1),
-      PoseLandmark(id: 7, name: '右膝', x: 0.55 + offset + (sin(time) * 0.08), y: 0.7 + (sin(time) * 0.15), z: 0, visibility: 1),
+      PoseLandmark(id: 6, name: '左膝', x: 0.45 + offset + (math.sin(time) * 0.08), y: 0.7 + (math.sin(time) * 0.15), z: 0, visibility: 1),
+      PoseLandmark(id: 7, name: '右膝', x: 0.55 + offset + (math.sin(time) * 0.08), y: 0.7 + (math.sin(time) * 0.15), z: 0, visibility: 1),
       PoseLandmark(id: 8, name: '左脚踝', x: 0.45 + offset, y: 0.9, z: 0, visibility: 1),
       PoseLandmark(id: 9, name: '右脚踝', x: 0.55 + offset, y: 0.9, z: 0, visibility: 1),
     ];
@@ -715,6 +726,3 @@ class _DuelScreenState extends State<DuelScreen> {
     return _buildModeSelectScreen();
   }
 }
-
-import 'dart:async';
-import 'dart:math' show sin;

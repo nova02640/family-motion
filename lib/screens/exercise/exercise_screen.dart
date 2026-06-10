@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/plan.dart';
@@ -27,11 +30,18 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
   bool isPerfect = false;
   int repCount = 0;
   int maxReps = 0;
+  Timer? _scoringTimer;
 
   @override
   void initState() {
     super.initState();
     _updateMaxReps();
+  }
+
+  @override
+  void dispose() {
+    _scoringTimer?.cancel();
+    super.dispose();
   }
 
   void _updateMaxReps() {
@@ -53,25 +63,26 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
 
   void _countdownTimer() {
     Future.delayed(const Duration(seconds: 1), () {
-      if (mounted && countdown > 0) {
+      if (!mounted) return;
+      if (countdown > 0) {
         setState(() => countdown--);
         _countdownTimer();
-      } else if (mounted && countdown == 0) {
+      } else if (countdown == 0) {
         _startScoring();
       }
     });
   }
 
   void _startScoring() {
-    const interval = Duration(milliseconds: 500);
-    Timer.periodic(interval, (timer) {
+    _scoringTimer?.cancel();
+    _scoringTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
       if (!mounted || !isPlaying) {
         timer.cancel();
         return;
       }
 
       PoseData mockPoseData = _generateMockPoseData();
-      StandardAction? standardAction = StandardAction.standardActions.firstWhere(
+      StandardAction standardAction = StandardAction.standardActions.firstWhere(
         (a) => a.name == widget.plan.exercises[currentIndex].name,
         orElse: () => StandardAction.standardActions[0],
       );
@@ -90,7 +101,7 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
 
       if (repCount >= maxReps) {
         timer.cancel();
-        completeExercise((currentScore).round());
+        completeExercise(currentScore.round());
       }
     });
   }
@@ -103,8 +114,8 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
       PoseLandmark(id: 3, name: '右肘', x: 0.7 - (currentScore / 300), y: 0.5, z: 0, visibility: 1),
       PoseLandmark(id: 4, name: '左髋', x: 0.4, y: 0.55, z: 0, visibility: 1),
       PoseLandmark(id: 5, name: '右髋', x: 0.6, y: 0.55, z: 0, visibility: 1),
-      PoseLandmark(id: 6, name: '左膝', x: 0.4 + (sin(DateTime.now().millisecond / 500) * 0.1), y: 0.75, z: 0, visibility: 1),
-      PoseLandmark(id: 7, name: '右膝', x: 0.6 + (sin(DateTime.now().millisecond / 500) * 0.1), y: 0.75, z: 0, visibility: 1),
+      PoseLandmark(id: 6, name: '左膝', x: 0.4 + (math.sin(DateTime.now().millisecond / 500) * 0.1), y: 0.75, z: 0, visibility: 1),
+      PoseLandmark(id: 7, name: '右膝', x: 0.6 + (math.sin(DateTime.now().millisecond / 500) * 0.1), y: 0.75, z: 0, visibility: 1),
       PoseLandmark(id: 8, name: '左脚踝', x: 0.4, y: 0.9, z: 0, visibility: 1),
       PoseLandmark(id: 9, name: '右脚踝', x: 0.6, y: 0.9, z: 0, visibility: 1),
     ];
@@ -112,6 +123,7 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
   }
 
   void completeExercise(int earnedScore) {
+    if (!mounted) return;
     setState(() {
       exerciseScores.add(earnedScore);
       score += earnedScore;
@@ -351,7 +363,3 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
     );
   }
 }
-
-import 'dart:async';
-import 'dart:math' as math;
-import 'dart:math' show sin;

@@ -99,11 +99,6 @@ class _ParentControlScreenState extends State<ParentControlScreen> {
                     children: [
                       Column(
                         children: [
-                          const Text(
-                            '⏱️',
-                            style: TextStyle(fontSize: 32),
-                          ),
-                          const SizedBox(height: 8),
                           Text(
                             '${appProvider.todayPlan.duration}分钟',
                             style: const TextStyle(
@@ -125,11 +120,6 @@ class _ParentControlScreenState extends State<ParentControlScreen> {
                       Column(
                         children: [
                           Text(
-                            appProvider.todayPlan.isCompleted ? '✅' : '⏳',
-                            style: const TextStyle(fontSize: 32),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
                             appProvider.todayPlan.isCompleted ? '100%' : '0%',
                             style: const TextStyle(
                               color: Colors.white,
@@ -149,11 +139,6 @@ class _ParentControlScreenState extends State<ParentControlScreen> {
                       ),
                       Column(
                         children: [
-                          const Text(
-                            '🎯',
-                            style: TextStyle(fontSize: 32),
-                          ),
-                          const SizedBox(height: 8),
                           const Text(
                             '88分',
                             style: TextStyle(
@@ -239,7 +224,14 @@ class _ParentControlScreenState extends State<ParentControlScreen> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.edit, color: Color(0xFF6366F1)),
-                    onPressed: () {},
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('编辑资料功能待接入'),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -272,13 +264,20 @@ class _ParentControlScreenState extends State<ParentControlScreen> {
                     children: [
                       const Text('运动时长趋势'),
                       TextButton(
-                        onPressed: () {},
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('详情页功能待接入'),
+                              duration: Duration(seconds: 1),
+                            ),
+                          );
+                        },
                         child: const Text('查看详情'),
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Container(
+                  SizedBox(
                     height: 100,
                     child: Row(
                       children: [
@@ -291,7 +290,7 @@ class _ParentControlScreenState extends State<ParentControlScreen> {
                                   alignment: Alignment.bottomCenter,
                                   child: Container(
                                     width: 20,
-                                    height: [40, 55, 35, 60, 45, 70, 50][i],
+                                    height: [40.0, 55.0, 35.0, 60.0, 45.0, 70.0, 50.0][i],
                                     decoration: BoxDecoration(
                                       color: const Color(0xFF6366F1),
                                       borderRadius: BorderRadius.circular(10),
@@ -412,7 +411,7 @@ class _ParentControlScreenState extends State<ParentControlScreen> {
                   ),
                   const Divider(height: 1),
                   ListTile(
-                    leading: const Icon(Icons.filter, color: Color(0xFF6366F1)),
+                    leading: const Icon(Icons.filter_list, color: Color(0xFF6366F1)),
                     title: const Text('内容过滤等级'),
                     subtitle: const Text('根据年龄筛选适合的内容'),
                     trailing: Text(contentFilter),
@@ -480,7 +479,7 @@ class _ParentControlScreenState extends State<ParentControlScreen> {
                         height: 40,
                         decoration: const BoxDecoration(
                           color: Color(0xFFE8F5E9),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.all(Radius.circular(12)),
                         ),
                         child: const Center(
                           child: Text(
@@ -529,7 +528,7 @@ class _ParentControlScreenState extends State<ParentControlScreen> {
                         height: 40,
                         decoration: const BoxDecoration(
                           color: Color(0xFFFEF3C7),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.all(Radius.circular(12)),
                         ),
                         child: const Center(
                           child: Text(
@@ -571,6 +570,7 @@ class _ParentControlScreenState extends State<ParentControlScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 30),
           ],
         ),
       ),
