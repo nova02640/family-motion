@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/plan.dart';
+import '../../models/standard_action.dart';
+import '../../models/pose_landmark.dart';
 import '../../providers/app_provider.dart';
+import '../../services/action_scoring_service.dart';
 import 'exercise_result_screen.dart';
 
 class ExerciseScreen extends StatefulWidget {
@@ -19,18 +22,93 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
   int countdown = 3;
   int score = 0;
   List<int> exerciseScores = [];
+  double currentScore = 0;
+  List<String> currentFeedback = [];
+  bool isPerfect = false;
+  int repCount = 0;
+  int maxReps = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _updateMaxReps();
+  }
+
+  void _updateMaxReps() {
+    if (widget.plan.exercises.isNotEmpty) {
+      maxReps = widget.plan.exercises[currentIndex].reps;
+    }
+  }
 
   void startExercise() {
     setState(() {
       countdown = 3;
       isPlaying = true;
+      currentScore = 0;
+      currentFeedback = [];
+      repCount = 0;
     });
+    _countdownTimer();
+  }
+
+  void _countdownTimer() {
     Future.delayed(const Duration(seconds: 1), () {
-      if (countdown > 0) {
+      if (mounted && countdown > 0) {
         setState(() => countdown--);
-        startExercise();
+        _countdownTimer();
+      } else if (mounted && countdown == 0) {
+        _startScoring();
       }
     });
+  }
+
+  void _startScoring() {
+    const interval = Duration(milliseconds: 500);
+    Timer.periodic(interval, (timer) {
+      if (!mounted || !isPlaying) {
+        timer.cancel();
+        return;
+      }
+
+      PoseData mockPoseData = _generateMockPoseData();
+      StandardAction? standardAction = StandardAction.standardActions.firstWhere(
+        (a) => a.name == widget.plan.exercises[currentIndex].name,
+        orElse: () => StandardAction.standardActions[0],
+      );
+
+      ScoreResult result = ActionScoringService.scoreAction(mockPoseData, standardAction);
+
+      setState(() {
+        currentScore = result.totalScore;
+        currentFeedback = result.feedback;
+        isPerfect = result.isPerfect;
+
+        if (result.totalScore >= 70) {
+          repCount++;
+        }
+      });
+
+      if (repCount >= maxReps) {
+        timer.cancel();
+        completeExercise((currentScore).round());
+      }
+    });
+  }
+
+  PoseData _generateMockPoseData() {
+    List<PoseLandmark> landmarks = [
+      PoseLandmark(id: 0, name: '左肩', x: 0.35 + (currentScore / 200), y: 0.35, z: 0, visibility: 1),
+      PoseLandmark(id: 1, name: '右肩', x: 0.65 - (currentScore / 200), y: 0.35, z: 0, visibility: 1),
+      PoseLandmark(id: 2, name: '左肘', x: 0.3 + (currentScore / 300), y: 0.5, z: 0, visibility: 1),
+      PoseLandmark(id: 3, name: '右肘', x: 0.7 - (currentScore / 300), y: 0.5, z: 0, visibility: 1),
+      PoseLandmark(id: 4, name: '左髋', x: 0.4, y: 0.55, z: 0, visibility: 1),
+      PoseLandmark(id: 5, name: '右髋', x: 0.6, y: 0.55, z: 0, visibility: 1),
+      PoseLandmark(id: 6, name: '左膝', x: 0.4 + (sin(DateTime.now().millisecond / 500) * 0.1), y: 0.75, z: 0, visibility: 1),
+      PoseLandmark(id: 7, name: '右膝', x: 0.6 + (sin(DateTime.now().millisecond / 500) * 0.1), y: 0.75, z: 0, visibility: 1),
+      PoseLandmark(id: 8, name: '左脚踝', x: 0.4, y: 0.9, z: 0, visibility: 1),
+      PoseLandmark(id: 9, name: '右脚踝', x: 0.6, y: 0.9, z: 0, visibility: 1),
+    ];
+    return PoseData(landmarks: landmarks, timestamp: DateTime.now());
   }
 
   void completeExercise(int earnedScore) {
@@ -41,7 +119,10 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
     });
 
     if (currentIndex < widget.plan.exercises.length - 1) {
-      setState(() => currentIndex++);
+      setState(() {
+        currentIndex++;
+        _updateMaxReps();
+      });
     } else {
       Provider.of<AppProvider>(context, listen: false).completePlan();
       Navigator.pushReplacement(
@@ -55,6 +136,13 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
         ),
       );
     }
+  }
+
+  Color _getScoreColor(double score) {
+    if (score >= 90) return Colors.green;
+    if (score >= 70) return Colors.blue;
+    if (score >= 50) return Colors.yellow;
+    return Colors.red;
   }
 
   @override
@@ -80,7 +168,10 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
                     style: const TextStyle(color: Colors.white, fontSize: 16),
                   ),
                   const Spacer(),
-                  const Icon(Icons.pause, color: Colors.white),
+                  IconButton(
+                    icon: const Icon(Icons.pause, color: Colors.white),
+                    onPressed: isPlaying ? () => setState(() => isPlaying = false) : null,
+                  ),
                 ],
               ),
             ),
@@ -106,22 +197,39 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
                               ),
                             )
                           : isPlaying && countdown == 0
-                              ? Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
+                              ? Stack(
                                   children: [
-                                    Text(
-                                      exercise.icon,
-                                      style: const TextStyle(fontSize: 64),
+                                    Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          exercise.icon,
+                                          style: const TextStyle(fontSize: 64),
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Text(
+                                          exercise.name,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 24,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      exercise.name,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.bold,
+                                    if (isPerfect)
+                                      const Positioned(
+                                        top: 20,
+                                        right: 20,
+                                        child: Text(
+                                          '✨ PERFECT!',
+                                          style: TextStyle(
+                                            color: Colors.yellow,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
                                       ),
-                                    ),
                                   ],
                                 )
                               : Column(
@@ -183,25 +291,34 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
                             style: TextStyle(color: Colors.white, fontSize: 16),
                           ),
                           const SizedBox(height: 8),
-                          const Text(
-                            '85',
+                          Text(
+                            currentScore.round().toString(),
                             style: TextStyle(
-                              color: Colors.green,
+                              color: _getScoreColor(currentScore),
                               fontSize: 48,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          const SizedBox(height: 16),
-                          const LinearProgressIndicator(
-                            value: 0.7,
-                            backgroundColor: Color(0xFF333),
-                            color: Color(0xFF6366F1),
-                          ),
                           const SizedBox(height: 8),
-                          const Text(
-                            '加油！保持姿势！',
-                            style: TextStyle(color: Colors.grey, fontSize: 14),
+                          Text(
+                            '完成次数: $repCount/$maxReps',
+                            style: const TextStyle(color: Colors.grey, fontSize: 14),
                           ),
+                          const SizedBox(height: 16),
+                          LinearProgressIndicator(
+                            value: repCount / maxReps,
+                            backgroundColor: const Color(0xFF333),
+                            color: const Color(0xFF6366F1),
+                            minHeight: 10,
+                          ),
+                          const SizedBox(height: 16),
+                          ...currentFeedback.map((feedback) => Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                child: Text(
+                                  feedback,
+                                  style: const TextStyle(color: Colors.yellow, fontSize: 14),
+                                ),
+                              )),
                         ],
                       ),
                     ),
@@ -210,7 +327,7 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
             ),
             if (isPlaying && countdown == 0)
               ElevatedButton(
-                onPressed: () => completeExercise(85),
+                onPressed: () => completeExercise(currentScore.round()),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
                   padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 16),
@@ -234,3 +351,7 @@ class _ExerciseScreenState extends State<ExerciseScreen> {
     );
   }
 }
+
+import 'dart:async';
+import 'dart:math' as math;
+import 'dart:math' show sin;
