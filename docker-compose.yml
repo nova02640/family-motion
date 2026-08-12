@@ -1,0 +1,55 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mir-web-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mir
+      POSTGRES_PASSWORD: mirpass
+      POSTGRES_DB: mir_web
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: mir-web-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis-data:/data
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: mir-web-server
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      NODE_ENV: production
+      PORT: 2567
+      DATABASE_URL: postgres://mir:mirpass@postgres:5432/mir_web
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: change-me-in-production
+    ports:
+      - "2567:2567"
+
+  client:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    container_name: mir-web-client
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "8080:80"
+    environment:
+      VITE_SERVER_URL: http://localhost:2567
