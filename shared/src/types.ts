@@ -120,6 +120,8 @@ export interface MonsterTemplate {
   attackRange: number;
   /** 视野范围（格） */
   aggroRange: number;
+  /** 是否主动攻击（false 为被动怪，仅被攻击后反击） */
+  aggressive?: boolean;
   /** 攻击间隔（毫秒） */
   attackInterval: number;
   /** 经验奖励 */
@@ -132,6 +134,34 @@ export interface MonsterTemplate {
   respawnTime: number;
   /** 贴图 key */
   sprite: string;
+}
+
+/** 技能类别 */
+export type SkillKind = 'melee' | 'pierce' | 'projectile' | 'bolt' | 'heal' | 'dot';
+
+/** 技能模板 */
+export interface SkillTemplate {
+  id: string;
+  name: string;
+  classId: PlayerClass;
+  kind: SkillKind;
+  /** 消耗魔法 */
+  mpCost: number;
+  /** 冷却时间（毫秒） */
+  cooldown: number;
+  /** 解锁等级 */
+  level: number;
+  /** 作用距离（格） */
+  range: number;
+  /** 伤害/治疗倍率（基于物攻/魔攻） */
+  multiplier: number;
+  /** 火球爆炸半径（格） */
+  aoeRadius?: number;
+  /** 持续伤害（施毒术） */
+  dot?: { damage: number; duration: number; tickInterval: number };
+  description: string;
+  /** UI/弹道颜色 */
+  color: number;
 }
 
 /** 地图瓦片类型 */

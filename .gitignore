@@ -9,6 +9,6 @@ build/
 .idea/
 coverage/
 *.tsbuildinfo
-data/
+/data/
 postgres-data/
 redis-data/

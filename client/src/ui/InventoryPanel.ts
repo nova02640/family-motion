@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { localState } from '../state/LocalState.js';
 import { gameClient } from '../net/GameClient.js';
 import { GAME_WIDTH, GAME_HEIGHT } from '../config.js';
-import { INVENTORY_SIZE, type EquipSlot, EquipSlot as ES } from '@mir/shared';
+import { INVENTORY_SIZE, getItem, type EquipSlot, EquipSlot as ES, type Stats } from '@mir/shared';
 import { ITEM_DISPLAY } from '../data/itemDisplay.js';
 
 interface SlotView {
@@ -14,6 +14,12 @@ interface SlotView {
 const SLOTS_PER_ROW = 8;
 const SLOT_SIZE = 56;
 
+const STAT_LABEL: Partial<Record<keyof Stats, string>> = {
+  maxHp: '生命', maxMp: '魔法', attack: '攻击', defense: '防御',
+  magicAttack: '魔攻', magicDefense: '魔防', accuracy: '命中', evasion: '闪避',
+  critRate: '暴击', critDamage: '暴伤', moveSpeed: '移速', attackSpeed: '攻速', luck: '幸运',
+};
+
 export class InventoryPanel {
   private scene: Phaser.Scene;
   private container: Phaser.GameObjects.Container;
@@ -22,6 +28,7 @@ export class InventoryPanel {
   private visible = false;
   private equipSlots = new Map<EquipSlot, Phaser.GameObjects.Text>();
   private contextMenu?: Phaser.GameObjects.Container;
+  private tooltip?: Phaser.GameObjects.Container;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -95,6 +102,8 @@ export class InventoryPanel {
       bgRect.setInteractive({ useHandCursor: true });
       const slotIndex = i;
       bgRect.on('pointerdown', () => this.showContextMenu(slotIndex, x, y));
+      bgRect.on('pointerover', () => this.showTooltip(slotIndex, x, y));
+      bgRect.on('pointerout', () => this.hideTooltip());
       this.slots.push({ index: slotIndex, bg: bgRect, text });
       this.container.add([bgRect, text]);
     }
@@ -105,11 +114,6 @@ export class InventoryPanel {
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     closeBtn.on('pointerdown', () => this.toggle());
     this.container.add(closeBtn);
-
-    // 点击面板外部关闭（简化：监听场景点击 - 但与游戏点击冲突，所以仅靠按钮/Esc/B 关闭）
-    scene.input.keyboard?.on('keydown-B', () => this.toggle());
-    scene.input.keyboard?.on('keydown-I', () => this.toggle());
-    scene.input.keyboard?.on('keydown-ESC', () => { if (this.visible) this.toggle(); });
   }
 
   toggle() {
@@ -176,8 +180,63 @@ export class InventoryPanel {
     this.scene.time.delayedCall(5000, () => { menu.destroy(); this.contextMenu = undefined; });
   }
 
+  private hideTooltip() {
+    this.tooltip?.destroy();
+    this.tooltip = undefined;
+  }
+
+  private showTooltip(slotIndex: number, x: number, y: number) {
+    const slotData = localState.inventory.slots.find((s) => s.index === slotIndex);
+    if (!slotData) { this.hideTooltip(); return; }
+    const tpl = getItem(slotData.itemId);
+    if (!tpl) { this.hideTooltip(); return; }
+
+    const lines: Array<{ text: string; color: string }> = [];
+    lines.push({ text: `${tpl.name}${tpl.type === 'consumable' ? '（消耗品）' : '（装备）'}`, color: '#fbbf24' });
+    lines.push({ text: tpl.description, color: '#9ca3af' });
+    if (tpl.requiredLevel > 0) lines.push({ text: `需求等级 ${tpl.requiredLevel}`, color: '#9ca3af' });
+    if (tpl.statsBonus) {
+      for (const [k, v] of Object.entries(tpl.statsBonus)) {
+        lines.push({ text: `${STAT_LABEL[k as keyof Stats] ?? k} +${v}`, color: '#34d399' });
+      }
+    }
+    if (tpl.useEffect?.hp) lines.push({ text: `回复生命 ${tpl.useEffect.hp}`, color: '#34d399' });
+    if (tpl.useEffect?.mp) lines.push({ text: `回复魔法 ${tpl.useEffect.mp}`, color: '#34d399' });
+
+    // 装备对比：当前已装备的同槽位物品
+    if (tpl.slot) {
+      const cur = localState.inventory.equipment.find((e) => e.slot === tpl.slot);
+      if (cur) {
+        const curTpl = getItem(cur.itemId);
+        lines.push({ text: `— 已装备：${curTpl?.name ?? cur.itemId} —`, color: '#9ca3af' });
+        if (curTpl?.statsBonus) {
+          for (const [k, v] of Object.entries(curTpl.statsBonus)) {
+            lines.push({ text: `${STAT_LABEL[k as keyof Stats] ?? k} +${v}`, color: '#9ca3af' });
+          }
+        }
+      }
+    }
+
+    this.hideTooltip();
+    const sx = GAME_WIDTH / 2 + x + SLOT_SIZE + 8;
+    const sy = GAME_HEIGHT / 2 + y;
+    const tooltip = this.scene.add.container(sx, sy).setDepth(320).setScrollFactor(0);
+    const w = 220;
+    const h = lines.length * 16 + 16;
+    const bg = this.scene.add.rectangle(0, 0, w, h, 0x111827, 0.97).setStrokeStyle(1, 0x4b5563).setOrigin(0, 0);
+    tooltip.add(bg);
+    lines.forEach((l, i) => {
+      const t = this.scene.add.text(8, 8 + i * 16, l.text, {
+        fontFamily: 'monospace', fontSize: '11px', color: l.color,
+      }).setOrigin(0, 0);
+      tooltip.add(t);
+    });
+    this.tooltip = tooltip;
+  }
+
   destroy() {
     this.container.destroy();
     this.contextMenu?.destroy();
+    this.tooltip?.destroy();
   }
 }

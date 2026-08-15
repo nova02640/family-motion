@@ -91,6 +91,8 @@ export interface DamageMessage {
   amount: number;
   type: 'physical' | 'magic' | 'true';
   crit: boolean;
+  /** 是否由技能造成（客户端用于区分飘字颜色） */
+  skill?: boolean;
   /** 受击方剩余 HP，便于客户端立即刷新 */
   targetHp: number;
 }

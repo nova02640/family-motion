@@ -4,6 +4,13 @@ import { localState } from '../state/LocalState.js';
 import { GAME_WIDTH, GAME_HEIGHT } from '../config.js';
 import { InventoryPanel } from './InventoryPanel.js';
 import { ChatPanel } from './ChatPanel.js';
+import { ShopPanel } from './ShopPanel.js';
+import { StatsPanel } from './StatsPanel.js';
+import { SkillBar } from './SkillBar.js';
+import { MinimapPanel } from './MinimapPanel.js';
+import { TaskPanel } from './TaskPanel.js';
+import { TextInput } from './TextInput.js';
+import type { ShopInfo } from '../game/engine/GameEngine.js';
 
 const CLASS_LABEL: Record<string, string> = {
   warrior: '战士', mage: '法师', taoist: '道士',
@@ -20,6 +27,11 @@ export class HudScene extends Phaser.Scene {
   private notifY = 80;
   private inventoryPanel!: InventoryPanel;
   private chatPanel!: ChatPanel;
+  private shopPanel!: ShopPanel;
+  private statsPanel!: StatsPanel;
+  private skillBar!: SkillBar;
+  private minimap!: MinimapPanel;
+  private taskPanel!: TaskPanel;
   private deathOverlay?: Phaser.GameObjects.Container;
   private toast?: Phaser.GameObjects.Text;
 
@@ -57,21 +69,28 @@ export class HudScene extends Phaser.Scene {
     this.expBar = this.add.rectangle(40, 84, 200, 6, 0xfacc15).setOrigin(0, 0.5)
       .setScrollFactor(0).setDepth(101);
 
-    // 顶部右：地图名 + 坐标
-    this.add.text(GAME_WIDTH - 16, 12, 'ESC: 退出  B: 背包  Enter: 聊天  空格: 拾取', {
+    // 顶部右：操作提示
+    this.add.text(GAME_WIDTH - 16, 12, '1/2:技能  B:背包  J:任务  C:属性  Enter:聊天', {
       fontFamily: 'monospace', fontSize: '11px', color: '#9ca3af',
     }).setOrigin(1, 0).setScrollFactor(0).setDepth(100);
 
     // 底部按钮
-    this.makeBtn(GAME_WIDTH / 2 - 200, GAME_HEIGHT - 28, '背包(B)', 0x4b5563, () => this.inventoryPanel.toggle());
-    this.makeBtn(GAME_WIDTH / 2 - 80, GAME_HEIGHT - 28, '聊天(Enter)', 0x4b5563, () => this.chatPanel.toggle());
-    this.makeBtn(GAME_WIDTH / 2 + 40, GAME_HEIGHT - 28, '拾取(空格)', 0x4b5563, () => gameClient.sendPickup());
+    this.makeBtn(GAME_WIDTH / 2 - 260, GAME_HEIGHT - 28, '背包(B)', 0x4b5563, () => this.inventoryPanel.toggle());
+    this.makeBtn(GAME_WIDTH / 2 - 140, GAME_HEIGHT - 28, '任务(J)', 0x4b5563, () => this.taskPanel.toggle());
+    this.makeBtn(GAME_WIDTH / 2 - 20, GAME_HEIGHT - 28, '聊天(Enter)', 0x4b5563, () => this.chatPanel.toggle());
+    this.makeBtn(GAME_WIDTH / 2 + 100, GAME_HEIGHT - 28, '拾取(空格)', 0x4b5563, () => gameClient.sendPickup());
+    this.makeBtn(GAME_WIDTH / 2 + 220, GAME_HEIGHT - 28, '属性(C)', 0x4b5563, () => this.statsPanel.toggle());
 
     // 死亡 overlay 隐藏，等待 onDeath 事件
 
     // 面板
     this.inventoryPanel = new InventoryPanel(this);
     this.chatPanel = new ChatPanel(this);
+    this.shopPanel = new ShopPanel(this);
+    this.statsPanel = new StatsPanel(this);
+    this.skillBar = new SkillBar(this);
+    this.minimap = new MinimapPanel(this);
+    this.taskPanel = new TaskPanel(this);
 
     // 事件订阅
     const gameScene = this.scene.get('game');
@@ -89,6 +108,7 @@ export class HudScene extends Phaser.Scene {
     gameScene.events.on('system-msg', (m: { text: string; level: string }) => {
       const color = m.level === 'error' ? '#f87171' : m.level === 'warn' ? '#fbbf24' : '#9ca3af';
       this.showNotification(m.text, color);
+      this.chatPanel.addSystemMessage(m.text, m.level);
     });
     gameScene.events.on('notify', (m: { text: string; level: string }) => {
       const color = m.level === 'error' ? '#f87171' : m.level === 'warn' ? '#fbbf24' : '#9ca3af';
@@ -102,24 +122,39 @@ export class HudScene extends Phaser.Scene {
     gameScene.events.on('error-msg', (m: { code: string; message: string }) => {
       this.showNotification(m.message, '#f87171');
     });
+    gameScene.events.on('open-shop', (shop: ShopInfo) => {
+      this.shopPanel.open(shop);
+    });
+    gameScene.events.on('open-tasks', () => this.taskPanel.open());
+    gameScene.events.on('task-update', () => this.taskPanel.refresh());
+    gameScene.events.on('close-chat', () => { if (this.chatPanel.isVisible()) this.chatPanel.toggle(); });
 
     // 按键
-    this.input.keyboard?.on('keydown-B', () => this.inventoryPanel.toggle());
-    this.input.keyboard?.on('keydown-ENTER', () => this.chatPanel.toggle());
-    this.input.keyboard?.on('keydown-I', () => this.inventoryPanel.toggle());
+    this.input.keyboard?.on('keydown-B', () => { if (!TextInput.isTyping()) this.inventoryPanel.toggle(); });
+    this.input.keyboard?.on('keydown-ENTER', () => { if (!TextInput.isTyping()) this.chatPanel.toggle(); });
+    this.input.keyboard?.on('keydown-I', () => { if (!TextInput.isTyping()) this.inventoryPanel.toggle(); });
+    this.input.keyboard?.on('keydown-C', () => { if (!TextInput.isTyping()) this.statsPanel.toggle(); });
+    this.input.keyboard?.on('keydown-J', () => { if (!TextInput.isTyping()) this.taskPanel.toggle(); });
 
     this.events.once('shutdown', () => {
       this.inventoryPanel?.destroy();
       this.chatPanel?.destroy();
+      this.shopPanel?.destroy();
+      this.statsPanel?.destroy();
+      this.skillBar?.destroy();
+      this.minimap?.destroy();
+      this.taskPanel?.destroy();
     });
   }
 
   update(_time: number, deltaMs: number) {
     this.updateNotifications(deltaMs);
+    this.skillBar.update();
+    this.minimap.update();
     const room = gameClient.room;
     if (!room) return;
     const state = room.state as unknown as {
-      players: Map<string, { name: string; classId: string; level: number; exp: number; expToNext: number; hp: number; maxHp: number; mp: number; maxMp: number; position: { x: number; y: number } }>;
+      players: Map<string, { name: string; classId: string; level: number; exp: number; expToNext: number; hp: number; maxHp: number; mp: number; maxMp: number; gold: number; position: { x: number; y: number } }>;
       mapId: string; mapName: string;
     };
     const me = state.players.get(localState.localSessionId ?? '');
@@ -131,7 +166,7 @@ export class HudScene extends Phaser.Scene {
       this.mpBar.setSize(200 * mpRatio, 12);
       this.expBar.setSize(200 * expRatio, 6);
       this.infoText.setText(
-        `${me.name}  ${CLASS_LABEL[me.classId] ?? me.classId}  Lv.${me.level}    HP ${Math.floor(me.hp)}/${me.maxHp}   MP ${Math.floor(me.mp)}/${me.maxMp}`,
+        `${me.name}  ${CLASS_LABEL[me.classId] ?? me.classId}  Lv.${me.level}    HP ${Math.floor(me.hp)}/${me.maxHp}   MP ${Math.floor(me.mp)}/${me.maxMp}   金币 ${me.gold ?? 0}`,
       );
     }
   }

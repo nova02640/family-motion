@@ -5,6 +5,7 @@ import { TILE_PX, GAME_WIDTH, GAME_HEIGHT } from '../config.js';
 import {
   ServerMsg,
   TileType,
+  getItem,
   type MapInitMessage,
   type PlayerState as PlayerStateT,
   type MonsterState as MonsterStateT,
@@ -12,6 +13,8 @@ import {
   type NpcState as NpcStateT,
 } from '@mir/shared';
 import { DamageText } from '../ui/DamageText.js';
+import { ChatPanel } from '../ui/ChatPanel.js';
+import { TextInput } from '../ui/TextInput.js';
 
 interface EntityView {
   id: string;
@@ -26,6 +29,7 @@ interface EntityView {
   targetY: number;
   /** 当前是否本地玩家 */
   isLocal?: boolean;
+  baseColor: number;
 }
 
 export class GameScene extends Phaser.Scene {
@@ -37,6 +41,8 @@ export class GameScene extends Phaser.Scene {
   private connectingText!: Phaser.GameObjects.Text;
   private disconnectText?: Phaser.GameObjects.Text;
   private dropLabels = new Map<string, Phaser.GameObjects.Text>();
+  private projectiles: Array<{ id: string; orb: Phaser.GameObjects.Arc; fromX: number; fromY: number; toId: string; bornAt: number; duration: number }> = [];
+  private exitMarkers: Phaser.GameObjects.Arc[] = [];
 
   constructor() {
     super('game');
@@ -47,7 +53,7 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#0d1117');
     this.tileGraphics = this.add.graphics();
 
-    this.connectingText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, '连接服务器中...', {
+    this.connectingText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, '加载世界中...', {
       fontFamily: 'monospace', fontSize: '20px', color: '#fbbf24',
     }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
 
@@ -70,14 +76,23 @@ export class GameScene extends Phaser.Scene {
       onDeath: (m) => this.events.emit('death', m),
       onRespawnResult: (m) => this.events.emit('respawn-result', m),
       onError: (m) => this.events.emit('error-msg', m),
+      onOpenShop: (s) => this.events.emit('open-shop', s),
+      onSkillEffect: (m) => this.spawnSkillEffect(m.kind, m.x, m.y),
+      onProjectile: (m) => this.spawnProjectile(m),
+      onOpenTasks: () => this.events.emit('open-tasks'),
+      onTaskUpdate: () => this.events.emit('task-update'),
       onDisconnect: () => this.onDisconnect(),
     });
 
     // 输入：点击移动/攻击/拾取
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => this.handlePointer(pointer));
 
-    // ESC：返回角色选择
+    // ESC：优先关闭聊天，其次返回角色选择
     this.input.keyboard?.on('keydown-ESC', () => {
+      if (ChatPanel.isOpen()) {
+        this.events.emit('close-chat');
+        return;
+      }
       gameClient.leave();
       this.scene.stop('hud');
       this.scene.start('character-select');
@@ -85,13 +100,23 @@ export class GameScene extends Phaser.Scene {
 
     // R：复活（死亡后）
     this.input.keyboard?.on('keydown-R', () => {
+      if (TextInput.isTyping()) return;
       if (this.localPlayer && this.localPlayer.container.getData('dead')) {
         gameClient.sendRespawn();
       }
     });
 
     // 空格：自动拾取附近物品
-    this.input.keyboard?.on('keydown-SPACE', () => gameClient.sendPickup());
+    this.input.keyboard?.on('keydown-SPACE', () => {
+      if (TextInput.isTyping()) return;
+      gameClient.sendPickup();
+    });
+
+    // 技能快捷键：1/2（及 Q/W）
+    this.input.keyboard?.on('keydown-ONE', () => { if (!TextInput.isTyping()) this.castSkillAt(0); });
+    this.input.keyboard?.on('keydown-TWO', () => { if (!TextInput.isTyping()) this.castSkillAt(1); });
+    this.input.keyboard?.on('keydown-Q', () => { if (!TextInput.isTyping()) this.castSkillAt(0); });
+    this.input.keyboard?.on('keydown-W', () => { if (!TextInput.isTyping()) this.castSkillAt(1); });
 
     this.events.once('shutdown', () => {
       gameClient.leave();
@@ -137,6 +162,27 @@ export class GameScene extends Phaser.Scene {
       }
     }
     this.tileGraphics.setDepth(-10);
+    this.renderExitMarkers();
+  }
+
+  private renderExitMarkers() {
+    for (const m of this.exitMarkers) m.destroy();
+    this.exitMarkers = [];
+    if (!this.mapData?.exits) return;
+    for (const exit of this.mapData.exits) {
+      const px = exit.position.x * TILE_PX + TILE_PX / 2;
+      const py = exit.position.y * TILE_PX + TILE_PX / 2;
+      const marker = this.add.arc(px, py, 10, 0, 360, false, 0x22d3ee, 0.6).setDepth(-1);
+      this.add.triangle(px, py - 6, px - 6, py + 6, px + 6, py + 6, 0x22d3ee).setDepth(0);
+      this.exitMarkers.push(marker);
+    }
+  }
+
+  private animateExitMarkers(_deltaMs: number) {
+    const pulse = 0.4 + 0.3 * Math.sin(this.time.now / 250);
+    for (const m of this.exitMarkers) {
+      m.setAlpha(pulse);
+    }
   }
 
   private syncEntities() {
@@ -211,7 +257,7 @@ export class GameScene extends Phaser.Scene {
       const id = `d_${key}`;
       seen.add(id);
       this.upsertEntity(id, 'drop', d.position.x, d.position.y, {
-        name: d.itemId === 'gold' ? `${d.count} 金` : d.itemId,
+        name: d.itemId === 'gold' ? `${d.count} 金` : (getItem(d.itemId)?.name ?? d.itemId),
         color: d.itemId === 'gold' ? 0xfde047 : 0xf59e0b,
         isLocal: false,
         hpRatio: 0,
@@ -286,7 +332,7 @@ export class GameScene extends Phaser.Scene {
       container.setDepth(kind === 'player' ? 10 : kind === 'monster' ? 5 : 1);
       view = {
         id, kind, container, sprite, nameText, hpBar, hpBarBg,
-        targetX: px, targetY: py, isLocal: opts.isLocal,
+        targetX: px, targetY: py, isLocal: opts.isLocal, baseColor: opts.color,
       };
       this.entities.set(id, view);
     }
@@ -309,12 +355,137 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private onDamage(msg: { targetId: string; sourceId: string; amount: number; crit: boolean; type: string; targetHp: number }) {
+  private onDamage(msg: { targetId: string; sourceId: string; amount: number; crit: boolean; type: string; skill?: boolean; targetHp: number }) {
     const view = this.findEntityByStateId(msg.targetId);
-    if (!view) return;
-    const color = msg.amount === 0 ? '#9ca3af' : msg.crit ? '#fbbf24' : msg.type === 'magic' ? '#a78bfa' : '#f87171';
-    const text = msg.amount === 0 ? 'MISS' : `${msg.amount}${msg.crit ? '!' : ''}`;
-    this.damageTexts.spawn(this, view.container.x, view.container.y - 30, text, color);
+    if (view) {
+      const color = msg.amount === 0 ? '#9ca3af'
+        : msg.crit ? '#ef4444'
+        : msg.skill ? '#fb923c'
+        : '#f8fafc';
+      const text = msg.amount === 0 ? 'MISS' : `${msg.amount}${msg.crit ? '!' : ''}`;
+      this.damageTexts.spawn(this, view.container.x, view.container.y - 30, text, color);
+      // 受击闪烁
+      this.flashEntity(view);
+    }
+    // 攻击者前倾
+    const src = this.findEntityByStateId(msg.sourceId);
+    if (src && view && src !== view) {
+      this.lungeToward(src, view.container.x, view.container.y);
+    }
+  }
+
+  private flashEntity(view: EntityView) {
+    view.sprite.setFillStyle(0xffffff);
+    this.time.delayedCall(90, () => {
+      if (view.sprite.active) view.sprite.setFillStyle(view.baseColor);
+    });
+  }
+
+  private lungeToward(view: EntityView, tx: number, ty: number) {
+    const dx = Math.sign(tx - view.container.x);
+    const dy = Math.sign(ty - view.container.y);
+    const ox = dx * 4;
+    const oy = dy * 4;
+    view.sprite.setScale(1.25);
+    this.tweens.add({
+      targets: view.sprite,
+      x: ox,
+      y: oy,
+      duration: 80,
+      yoyo: true,
+      onComplete: () => {
+        if (view.sprite.active) {
+          view.sprite.setScale(1);
+          view.sprite.setPosition(0, 0);
+        }
+      },
+    });
+  }
+
+  private castSkillAt(index: number) {
+    const skills = gameClient.getSkills();
+    const skill = skills[index];
+    if (!skill) return;
+    gameClient.sendUseSkill(skill.id);
+  }
+
+  private spawnProjectile(m: { id: string; fromX: number; fromY: number; toId: string; duration: number; color: number }) {
+    const orb = this.add.circle(m.fromX * TILE_PX, m.fromY * TILE_PX, 6, m.color)
+      .setStrokeStyle(2, 0x000000).setDepth(60);
+    this.projectiles.push({
+      id: m.id, orb,
+      fromX: m.fromX * TILE_PX, fromY: m.fromY * TILE_PX,
+      toId: m.toId, bornAt: this.time.now, duration: m.duration,
+    });
+  }
+
+  private spawnSkillEffect(kind: string, x: number, y: number) {
+    const px = x * TILE_PX;
+    const py = y * TILE_PX;
+    if (kind === 'fireball') {
+      const boom = this.add.circle(px, py, 8, 0xf97316).setStrokeStyle(2, 0xfde047).setDepth(70);
+      this.tweens.add({
+        targets: boom,
+        scale: 3,
+        alpha: 0,
+        duration: 300,
+        onComplete: () => boom.destroy(),
+      });
+    } else if (kind === 'lightning') {
+      const g = this.add.graphics().setDepth(70);
+      g.lineStyle(3, 0xfde047, 1);
+      g.beginPath();
+      let cx = px;
+      const topY = py - 40;
+      g.moveTo(px, topY);
+      const segs = 5;
+      for (let i = 1; i <= segs; i++) {
+        const sy = topY + ((py - topY) * i) / segs;
+        const sx = px + (i % 2 === 0 ? 10 : -10);
+        g.lineTo(sx, sy);
+        cx = sx;
+      }
+      g.strokePath();
+      this.tweens.add({ targets: g, alpha: 0, duration: 220, onComplete: () => g.destroy() });
+    } else if (kind === 'poison') {
+      const smoke = this.add.circle(px, py, 10, 0x84cc16, 0.6).setDepth(55);
+      this.tweens.add({
+        targets: smoke, scale: 2, alpha: 0, duration: 700, onComplete: () => smoke.destroy(),
+      });
+    } else if (kind === 'heal') {
+      const ring = this.add.circle(px, py, 8, 0x34d399, 0.6).setStrokeStyle(2, 0x34d399).setDepth(55);
+      this.tweens.add({
+        targets: ring, scale: 2.2, alpha: 0, duration: 600, onComplete: () => ring.destroy(),
+      });
+    } else if (kind === 'slash') {
+      const slash = this.add.circle(px, py, 10, 0xffffff, 0.5).setDepth(60);
+      this.tweens.add({
+        targets: slash, scale: 1.8, alpha: 0, duration: 180, onComplete: () => slash.destroy(),
+      });
+    } else if (kind === 'assault') {
+      const streak = this.add.rectangle(px, py, TILE_PX * 2, 8, 0x93c5fd, 0.7).setDepth(60);
+      this.tweens.add({
+        targets: streak, alpha: 0, duration: 220, onComplete: () => streak.destroy(),
+      });
+    }
+  }
+
+  private updateProjectiles(deltaMs: number) {
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const p = this.projectiles[i];
+      const elapsed = this.time.now - p.bornAt;
+      const t = Math.min(1, elapsed / Math.max(1, p.duration));
+      // 目标实时位置
+      const targetView = this.findEntityByStateId(p.toId);
+      const tx = targetView ? targetView.container.x : p.fromX;
+      const ty = targetView ? targetView.container.y : p.fromY;
+      p.orb.x = p.fromX + (tx - p.fromX) * t;
+      p.orb.y = p.fromY + (ty - p.fromY) * t;
+      if (t >= 1) {
+        p.orb.destroy();
+        this.projectiles.splice(i, 1);
+      }
+    }
   }
 
   private findEntityByStateId(stateId: string): EntityView | undefined {
@@ -377,9 +548,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private monsterColor(templateId: string): number {
-    if (templateId === 'slime') return 0x84cc16;
-    if (templateId === 'wolf') return 0xa16207;
+    if (templateId === 'chicken') return 0x84cc16;
+    if (templateId === 'deer') return 0xa16207;
+    if (templateId === 'scarecrow') return 0xfacc15;
+    if (templateId === 'hook_cat') return 0xf97316;
     if (templateId === 'skeleton') return 0xe5e7eb;
+    if (templateId === 'zombie') return 0x6b7280;
+    if (templateId === 'red_snake') return 0xef4444;
+    if (templateId === 'woma_warrior') return 0x8b5cf6;
     return 0xef4444;
   }
 
@@ -390,6 +566,8 @@ export class GameScene extends Phaser.Scene {
       view.container.y += (view.targetY - view.container.y) * lerpFactor;
     }
     this.damageTexts.update(deltaMs);
+    this.updateProjectiles(deltaMs);
+    this.animateExitMarkers(deltaMs);
   }
 
   private onDisconnect() {

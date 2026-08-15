@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 const serverUrl = process.env.VITE_SERVER_URL ?? 'http://localhost:2567';
 
 export default defineConfig({
+  base: './',
   define: {
     'import.meta.env.VITE_SERVER_URL': JSON.stringify(serverUrl),
   },

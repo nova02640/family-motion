@@ -12,6 +12,13 @@ import Phaser from 'phaser';
 const PRINTABLE = /^[a-zA-Z0-9 ._\-@]$/;
 
 export class TextInput {
+  private static activeCount = 0;
+
+  /** 是否有任意输入框正在输入（供游戏按键处理判断） */
+  static isTyping(): boolean {
+    return TextInput.activeCount > 0;
+  }
+
   private scene: Phaser.Scene;
   private buffer = '';
   readonly text: Phaser.GameObjects.Text;
@@ -47,29 +54,34 @@ export class TextInput {
   focus() {
     if (this.focused) return;
     this.focused = true;
+    TextInput.activeCount += 1;
     this.bg.setStrokeStyle(2, 0x60a5fa);
     this.onKeyDown = (event: KeyboardEvent) => this.handleKey(event);
     window.addEventListener('keydown', this.onKeyDown);
     this.blink = this.scene.time.addEvent({
       delay: 500, loop: true, callback: () => { this.cursor = !this.cursor; this.renderText(); },
     });
-    // 阻止 Phaser 接收空格等键
-    this.scene.input.keyboard?.removeAllListeners('keydown');
+    // 输入期间暂停本场景的键盘事件，避免空格/快捷键误触
+    if (this.scene.input.keyboard) this.scene.input.keyboard.enabled = false;
   }
 
   blur() {
     if (!this.focused) return;
     this.focused = false;
+    TextInput.activeCount -= 1;
     this.bg.setStrokeStyle(1, 0x4b5563);
     if (this.onKeyDown) window.removeEventListener('keydown', this.onKeyDown);
     this.blink?.remove();
     this.cursor = false;
     this.renderText();
+    if (this.scene.input.keyboard) this.scene.input.keyboard.enabled = true;
   }
 
   isFocused() { return this.focused; }
 
   getValue() { return this.buffer; }
+
+  setValue(v: string) { this.buffer = v; this.renderText(); }
 
   clear() { this.buffer = ''; this.renderText(); }
 

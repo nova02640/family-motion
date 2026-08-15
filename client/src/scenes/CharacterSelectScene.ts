@@ -34,7 +34,7 @@ export class CharacterSelectScene extends Phaser.Scene {
     await this.refreshList();
 
     this.makeButton(120, GAME_HEIGHT - 40, '← 退出登录', 0x4b5563, () => {
-      localState.clearAuth();
+      api.logout();
       this.scene.start('login');
     });
 

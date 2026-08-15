@@ -3,7 +3,7 @@ import { gameClient } from '../net/GameClient.js';
 import { GAME_WIDTH, GAME_HEIGHT } from '../config.js';
 import { TextInput } from './TextInput.js';
 
-interface ChatMsg { fromName: string; text: string; ts: number }
+interface ChatMsg { fromName: string; text: string; ts: number; system?: boolean; level?: string }
 
 const PANEL_X = 16;
 const PANEL_Y = GAME_HEIGHT - 200;
@@ -12,6 +12,13 @@ const PANEL_H = 180;
 const MAX_MSG = 12;
 
 export class ChatPanel {
+  private static openCount = 0;
+
+  /** 是否有聊天面板打开（供 ESC 优先级判断） */
+  static isOpen(): boolean {
+    return ChatPanel.openCount > 0;
+  }
+
   private scene: Phaser.Scene;
   private objs: Phaser.GameObjects.GameObject[] = [];
   private inputEl: TextInput;
@@ -58,15 +65,6 @@ export class ChatPanel {
       this.inputEl.clear();
     });
 
-    // 监听游戏场景的聊天事件
-    const gameScene = scene.scene.get('game');
-    gameScene.events.on('chat', (m: { fromName: string; text: string; timestamp: number }) => {
-      this.addMessage(m.fromName, m.text);
-    });
-
-    scene.input.keyboard?.on('keydown-ENTER', () => this.toggle());
-    scene.input.keyboard?.on('keydown-ESC', () => { if (this.visible) this.toggle(); });
-
     // 初始隐藏
     this.setVisible(false);
   }
@@ -81,10 +79,16 @@ export class ChatPanel {
   toggle() {
     this.visible = !this.visible;
     this.setVisible(this.visible);
+    if (this.visible) ChatPanel.openCount += 1;
+    else ChatPanel.openCount = Math.max(0, ChatPanel.openCount - 1);
     if (this.visible) {
       this.inputEl.focus();
       this.renderMessages();
     }
+  }
+
+  isVisible() {
+    return this.visible;
   }
 
   addMessage(fromName: string, text: string) {
@@ -95,14 +99,24 @@ export class ChatPanel {
     if (this.visible) this.renderMessages();
   }
 
+  addSystemMessage(text: string, level = 'info') {
+    this.messages.push({ fromName: '系统', text, ts: Date.now(), system: true, level });
+    if (this.messages.length > MAX_MSG * 2) {
+      this.messages = this.messages.slice(-MAX_MSG * 2);
+    }
+    if (this.visible) this.renderMessages();
+  }
+
   private renderMessages() {
     const recent = this.messages.slice(-MAX_MSG);
-    const txt = recent.map((m) => `[${m.fromName}] ${m.text}`).join('\n');
+    const txt = recent.map((m) => m.system ? `【系统】${m.text}` : `[${m.fromName}] ${m.text}`).join('\n');
     this.msgText.setText(txt);
   }
 
   destroy() {
     for (const o of this.objs) o.destroy();
     this.inputEl.destroy();
+    if (this.visible) ChatPanel.openCount = Math.max(0, ChatPanel.openCount - 1);
+    this.visible = false;
   }
 }
