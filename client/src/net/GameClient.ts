@@ -15,6 +15,7 @@ import {
 } from '../game/engine/GameEngine.js';
 import type { TaskState } from '../game/tasks.js';
 import { getCharacter } from '../game/save.js';
+import { reportError } from '../util/errorReport.js';
 
 export interface GameClientCallbacks {
   onMapInit?: (msg: import('@mir/shared').MapInitMessage) => void;
@@ -94,11 +95,15 @@ export class GameClient {
     let last = Date.now();
     this.tickTimer = window.setInterval(() => {
       if (!this.engine) return;
-      const now = Date.now();
-      const dt = Math.min(120, now - last);
-      last = now;
-      this.engine.tick(dt);
-      this.callbacks.onStateChange?.();
+      try {
+        const now = Date.now();
+        const dt = Math.min(120, Math.max(0, now - last));
+        last = now;
+        this.engine.tick(dt);
+        this.callbacks.onStateChange?.();
+      } catch (err) {
+        reportError(String(err), 'GameClient.tick');
+      }
     }, 50);
   }
 

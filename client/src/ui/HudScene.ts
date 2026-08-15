@@ -10,6 +10,7 @@ import { SkillBar } from './SkillBar.js';
 import { MinimapPanel } from './MinimapPanel.js';
 import { TaskPanel } from './TaskPanel.js';
 import { TextInput } from './TextInput.js';
+import { reportError } from '../util/errorReport.js';
 import type { ShopInfo } from '../game/engine/GameEngine.js';
 
 const CLASS_LABEL: Record<string, string> = {
@@ -40,6 +41,14 @@ export class HudScene extends Phaser.Scene {
   }
 
   create() {
+    try {
+      this.buildHud();
+    } catch (err) {
+      reportError(String(err), 'HudScene.create');
+    }
+  }
+
+  private buildHud() {
     // 顶部信息
     this.infoText = this.add.text(16, 12, '', {
       fontFamily: 'monospace', fontSize: '13px', color: '#e5e7eb',
@@ -94,40 +103,42 @@ export class HudScene extends Phaser.Scene {
 
     // 事件订阅
     const gameScene = this.scene.get('game');
-    gameScene.events.on('inv-snapshot', () => this.inventoryPanel.refresh());
-    gameScene.events.on('exp-gain', (m: { amount: number; currentExp: number; expToNext: number }) => {
-      this.showNotification(`+${m.amount} 经验`, '#facc15');
-    });
-    gameScene.events.on('level-up', (m: { newLevel: number }) => {
-      this.showNotification(`升级！当前 Lv.${m.newLevel}`, '#fbbf24');
-    });
-    gameScene.events.on('pickup-result', (m: { ok: boolean; itemId: string; count: number; reason?: string }) => {
-      if (!m.ok) this.showNotification(m.reason ?? '拾取失败', '#f87171');
-      else this.showNotification(`拾取 ${m.itemId} x${m.count}`, '#fde047');
-    });
-    gameScene.events.on('system-msg', (m: { text: string; level: string }) => {
-      const color = m.level === 'error' ? '#f87171' : m.level === 'warn' ? '#fbbf24' : '#9ca3af';
-      this.showNotification(m.text, color);
-      this.chatPanel.addSystemMessage(m.text, m.level);
-    });
-    gameScene.events.on('notify', (m: { text: string; level: string }) => {
-      const color = m.level === 'error' ? '#f87171' : m.level === 'warn' ? '#fbbf24' : '#9ca3af';
-      this.showNotification(m.text, color);
-    });
-    gameScene.events.on('chat', (m: { fromName: string; text: string }) => {
-      this.chatPanel.addMessage(m.fromName, m.text);
-    });
-    gameScene.events.on('death', () => this.showDeathOverlay());
-    gameScene.events.on('respawn-result', () => this.hideDeathOverlay());
-    gameScene.events.on('error-msg', (m: { code: string; message: string }) => {
-      this.showNotification(m.message, '#f87171');
-    });
-    gameScene.events.on('open-shop', (shop: ShopInfo) => {
-      this.shopPanel.open(shop);
-    });
-    gameScene.events.on('open-tasks', () => this.taskPanel.open());
-    gameScene.events.on('task-update', () => this.taskPanel.refresh());
-    gameScene.events.on('close-chat', () => { if (this.chatPanel.isVisible()) this.chatPanel.toggle(); });
+    if (gameScene) {
+      gameScene.events.on('inv-snapshot', () => this.inventoryPanel.refresh());
+      gameScene.events.on('exp-gain', (m: { amount: number; currentExp: number; expToNext: number }) => {
+        this.showNotification(`+${m.amount} 经验`, '#facc15');
+      });
+      gameScene.events.on('level-up', (m: { newLevel: number }) => {
+        this.showNotification(`升级！当前 Lv.${m.newLevel}`, '#fbbf24');
+      });
+      gameScene.events.on('pickup-result', (m: { ok: boolean; itemId: string; count: number; reason?: string }) => {
+        if (!m.ok) this.showNotification(m.reason ?? '拾取失败', '#f87171');
+        else this.showNotification(`拾取 ${m.itemId} x${m.count}`, '#fde047');
+      });
+      gameScene.events.on('system-msg', (m: { text: string; level: string }) => {
+        const color = m.level === 'error' ? '#f87171' : m.level === 'warn' ? '#fbbf24' : '#9ca3af';
+        this.showNotification(m.text, color);
+        this.chatPanel.addSystemMessage(m.text, m.level);
+      });
+      gameScene.events.on('notify', (m: { text: string; level: string }) => {
+        const color = m.level === 'error' ? '#f87171' : m.level === 'warn' ? '#fbbf24' : '#9ca3af';
+        this.showNotification(m.text, color);
+      });
+      gameScene.events.on('chat', (m: { fromName: string; text: string }) => {
+        this.chatPanel.addMessage(m.fromName, m.text);
+      });
+      gameScene.events.on('death', () => this.showDeathOverlay());
+      gameScene.events.on('respawn-result', () => this.hideDeathOverlay());
+      gameScene.events.on('error-msg', (m: { code: string; message: string }) => {
+        this.showNotification(m.message, '#f87171');
+      });
+      gameScene.events.on('open-shop', (shop: ShopInfo) => {
+        this.shopPanel.open(shop);
+      });
+      gameScene.events.on('open-tasks', () => this.taskPanel.open());
+      gameScene.events.on('task-update', () => this.taskPanel.refresh());
+      gameScene.events.on('close-chat', () => { if (this.chatPanel.isVisible()) this.chatPanel.toggle(); });
+    }
 
     // 按键
     this.input.keyboard?.on('keydown-B', () => { if (!TextInput.isTyping()) this.inventoryPanel.toggle(); });
@@ -148,26 +159,30 @@ export class HudScene extends Phaser.Scene {
   }
 
   update(_time: number, deltaMs: number) {
-    this.updateNotifications(deltaMs);
-    this.skillBar.update();
-    this.minimap.update();
-    const room = gameClient.room;
-    if (!room) return;
-    const state = room.state as unknown as {
-      players: Map<string, { name: string; classId: string; level: number; exp: number; expToNext: number; hp: number; maxHp: number; mp: number; maxMp: number; gold: number; position: { x: number; y: number } }>;
-      mapId: string; mapName: string;
-    };
-    const me = state.players.get(localState.localSessionId ?? '');
-    if (me) {
-      const hpRatio = Math.max(0, me.hp / Math.max(1, me.maxHp));
-      const mpRatio = Math.max(0, me.mp / Math.max(1, me.maxMp));
-      const expRatio = Math.max(0, me.exp / Math.max(1, me.expToNext));
-      this.hpBar.setSize(200 * hpRatio, 12);
-      this.mpBar.setSize(200 * mpRatio, 12);
-      this.expBar.setSize(200 * expRatio, 6);
-      this.infoText.setText(
-        `${me.name}  ${CLASS_LABEL[me.classId] ?? me.classId}  Lv.${me.level}    HP ${Math.floor(me.hp)}/${me.maxHp}   MP ${Math.floor(me.mp)}/${me.maxMp}   金币 ${me.gold ?? 0}`,
-      );
+    try {
+      this.updateNotifications(deltaMs);
+      this.skillBar.update();
+      this.minimap.update();
+      const room = gameClient.room;
+      if (!room) return;
+      const state = room.state as unknown as {
+        players: Map<string, { name: string; classId: string; level: number; exp: number; expToNext: number; hp: number; maxHp: number; mp: number; maxMp: number; gold: number; position: { x: number; y: number } }>;
+        mapId: string; mapName: string;
+      };
+      const me = state.players.get(localState.localSessionId ?? '');
+      if (me) {
+        const hpRatio = Number.isFinite(me.hp / Math.max(1, me.maxHp)) ? Math.max(0, me.hp / Math.max(1, me.maxHp)) : 0;
+        const mpRatio = Number.isFinite(me.mp / Math.max(1, me.maxMp)) ? Math.max(0, me.mp / Math.max(1, me.maxMp)) : 0;
+        const expRatio = Number.isFinite(me.exp / Math.max(1, me.expToNext)) ? Math.max(0, me.exp / Math.max(1, me.expToNext)) : 0;
+        this.hpBar.setSize(200 * hpRatio, 12);
+        this.mpBar.setSize(200 * mpRatio, 12);
+        this.expBar.setSize(200 * expRatio, 6);
+        this.infoText.setText(
+          `${me.name}  ${CLASS_LABEL[me.classId] ?? me.classId}  Lv.${me.level}    HP ${Math.floor(me.hp)}/${me.maxHp}   MP ${Math.floor(me.mp)}/${me.maxMp}   金币 ${me.gold ?? 0}`,
+        );
+      }
+    } catch (err) {
+      reportError(String(err), 'HudScene.update');
     }
   }
 

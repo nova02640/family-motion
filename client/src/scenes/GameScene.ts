@@ -15,6 +15,7 @@ import {
 import { DamageText } from '../ui/DamageText.js';
 import { ChatPanel } from '../ui/ChatPanel.js';
 import { TextInput } from '../ui/TextInput.js';
+import { reportError } from '../util/errorReport.js';
 
 interface EntityView {
   id: string;
@@ -50,6 +51,33 @@ export class GameScene extends Phaser.Scene {
   }
 
   async create() {
+    try {
+      this.setupScene();
+    } catch (err) {
+      reportError(String(err), 'GameScene.create');
+      this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, `初始化失败: ${(err as Error).message}`, {
+        fontFamily: 'monospace', fontSize: '16px', color: '#f87171', align: 'center',
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
+      return;
+    }
+
+    // 连接
+    try {
+      const charId = localState.currentCharacterId;
+      if (!charId) {
+        this.scene.start('character-select');
+        return;
+      }
+      await gameClient.join(charId);
+      this.connectingText.setVisible(false);
+    } catch (err) {
+      reportError(String(err), 'GameScene.join');
+      this.connectingText.setText(`连接失败: ${(err as Error).message}\n按 ESC 返回`);
+    }
+  }
+
+  private setupScene() {
+    window.__mirGameStartedAt = Date.now();
     this.cameras.main.setBackgroundColor('#0d1117');
     this.tileGraphics = this.add.graphics();
 
@@ -121,24 +149,16 @@ export class GameScene extends Phaser.Scene {
     this.events.once('shutdown', () => {
       gameClient.leave();
     });
-
-    // 连接
-    try {
-      const charId = localState.currentCharacterId;
-      if (!charId) {
-        this.scene.start('character-select');
-        return;
-      }
-      await gameClient.join(charId);
-      this.connectingText.setVisible(false);
-    } catch (err) {
-      this.connectingText.setText(`连接失败: ${(err as Error).message}\n按 ESC 返回`);
-    }
   }
 
   private onMapInit(msg: MapInitMessage) {
     this.mapData = msg;
-    this.renderTiles();
+    window.__mirMapInitAt = Date.now();
+    try {
+      this.renderTiles();
+    } catch (err) {
+      reportError(String(err), 'GameScene.renderTiles');
+    }
   }
 
   private renderTiles() {
@@ -173,7 +193,8 @@ export class GameScene extends Phaser.Scene {
       const px = exit.position.x * TILE_PX + TILE_PX / 2;
       const py = exit.position.y * TILE_PX + TILE_PX / 2;
       const marker = this.add.arc(px, py, 10, 0, 360, false, 0x22d3ee, 0.6).setDepth(-1);
-      this.add.triangle(px, py - 6, px - 6, py + 6, px + 6, py + 6, 0x22d3ee).setDepth(0);
+      // 三角形箭头：add.triangle(x, y, x1, y1, x2, y2, x3, y3, fillColor)
+      this.add.triangle(px, py, px - 6, py - 6, px + 6, py - 6, px, py + 6, 0x22d3ee).setDepth(0);
       this.exitMarkers.push(marker);
     }
   }
@@ -188,13 +209,24 @@ export class GameScene extends Phaser.Scene {
   private syncEntities() {
     const room = gameClient.room;
     if (!room || !this.mapData) return;
-    const state = room.state as unknown as {
-      players: Map<string, PlayerStateT>;
-      monsters: Map<string, MonsterStateT>;
-      drops: Map<string, ItemDropStateT>;
-      npcs: Map<string, NpcStateT>;
-    };
+    try {
+      this.doSyncEntities(room.state as unknown as {
+        players: Map<string, PlayerStateT>;
+        monsters: Map<string, MonsterStateT>;
+        drops: Map<string, ItemDropStateT>;
+        npcs: Map<string, NpcStateT>;
+      });
+    } catch (err) {
+      reportError(String(err), 'GameScene.syncEntities');
+    }
+  }
 
+  private doSyncEntities(state: {
+    players: Map<string, PlayerStateT>;
+    monsters: Map<string, MonsterStateT>;
+    drops: Map<string, ItemDropStateT>;
+    npcs: Map<string, NpcStateT>;
+  }) {
     const seen = new Set<string>();
 
     // 玩家
@@ -341,7 +373,8 @@ export class GameScene extends Phaser.Scene {
     view.nameText.setText(opts.name);
 
     if (view.hpBar && view.hpBarBg) {
-      const w = 28 * Math.max(0, Math.min(1, opts.hpRatio));
+      const ratio = Number.isFinite(opts.hpRatio) ? Math.max(0, Math.min(1, opts.hpRatio)) : 0;
+      const w = 28 * ratio;
       view.hpBar.setSize(w, 4);
       view.hpBar.setX(-(28 - w) / 2);
       view.hpBar.setVisible(opts.showHp);
@@ -356,21 +389,25 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onDamage(msg: { targetId: string; sourceId: string; amount: number; crit: boolean; type: string; skill?: boolean; targetHp: number }) {
-    const view = this.findEntityByStateId(msg.targetId);
-    if (view) {
-      const color = msg.amount === 0 ? '#9ca3af'
-        : msg.crit ? '#ef4444'
-        : msg.skill ? '#fb923c'
-        : '#f8fafc';
-      const text = msg.amount === 0 ? 'MISS' : `${msg.amount}${msg.crit ? '!' : ''}`;
-      this.damageTexts.spawn(this, view.container.x, view.container.y - 30, text, color);
-      // 受击闪烁
-      this.flashEntity(view);
-    }
-    // 攻击者前倾
-    const src = this.findEntityByStateId(msg.sourceId);
-    if (src && view && src !== view) {
-      this.lungeToward(src, view.container.x, view.container.y);
+    try {
+      const view = this.findEntityByStateId(msg.targetId);
+      if (view) {
+        const color = msg.amount === 0 ? '#9ca3af'
+          : msg.crit ? '#ef4444'
+          : msg.skill ? '#fb923c'
+          : '#f8fafc';
+        const text = msg.amount === 0 ? 'MISS' : `${msg.amount}${msg.crit ? '!' : ''}`;
+        this.damageTexts.spawn(this, view.container.x, view.container.y - 30, text, color);
+        // 受击闪烁
+        this.flashEntity(view);
+      }
+      // 攻击者前倾
+      const src = this.findEntityByStateId(msg.sourceId);
+      if (src && view && src !== view) {
+        this.lungeToward(src, view.container.x, view.container.y);
+      }
+    } catch (err) {
+      reportError(String(err), 'GameScene.onDamage');
     }
   }
 
@@ -501,6 +538,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private handlePointer(pointer: Phaser.Input.Pointer) {
+    try {
+      this.dispatchPointer(pointer);
+    } catch (err) {
+      reportError(String(err), 'GameScene.handlePointer');
+    }
+  }
+
+  private dispatchPointer(pointer: Phaser.Input.Pointer) {
     if (!this.mapData || !this.localPlayer) return;
     if (this.localPlayer.container.getData('dead')) return;
 
@@ -560,14 +605,18 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, deltaMs: number) {
-    const lerpFactor = Math.min(1, deltaMs / 80);
-    for (const view of this.entities.values()) {
-      view.container.x += (view.targetX - view.container.x) * lerpFactor;
-      view.container.y += (view.targetY - view.container.y) * lerpFactor;
+    try {
+      const lerpFactor = Math.min(1, deltaMs / 80);
+      for (const view of this.entities.values()) {
+        view.container.x += (view.targetX - view.container.x) * lerpFactor;
+        view.container.y += (view.targetY - view.container.y) * lerpFactor;
+      }
+      this.damageTexts.update(deltaMs);
+      this.updateProjectiles(deltaMs);
+      this.animateExitMarkers(deltaMs);
+    } catch (err) {
+      reportError(String(err), 'GameScene.update');
     }
-    this.damageTexts.update(deltaMs);
-    this.updateProjectiles(deltaMs);
-    this.animateExitMarkers(deltaMs);
   }
 
   private onDisconnect() {
