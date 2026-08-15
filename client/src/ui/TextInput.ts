@@ -26,6 +26,7 @@ export class TextInput {
   private cursor = true;
   private blink?: Phaser.Time.TimerEvent;
   private focused = false;
+  private destroyed = false;
   private onKeyDown?: (event: KeyboardEvent) => void;
   placeholder: string;
   maxLength: number;
@@ -52,10 +53,10 @@ export class TextInput {
   }
 
   focus() {
-    if (this.focused) return;
+    if (this.focused || this.destroyed) return;
     this.focused = true;
     TextInput.activeCount += 1;
-    this.bg.setStrokeStyle(2, 0x60a5fa);
+    if (this.bg.active) this.bg.setStrokeStyle(2, 0x60a5fa);
     this.onKeyDown = (event: KeyboardEvent) => this.handleKey(event);
     window.addEventListener('keydown', this.onKeyDown);
     this.blink = this.scene.time.addEvent({
@@ -68,10 +69,12 @@ export class TextInput {
   blur() {
     if (!this.focused) return;
     this.focused = false;
-    TextInput.activeCount -= 1;
-    this.bg.setStrokeStyle(1, 0x4b5563);
+    TextInput.activeCount = Math.max(0, TextInput.activeCount - 1);
+    if (this.bg.active) this.bg.setStrokeStyle(1, 0x4b5563);
     if (this.onKeyDown) window.removeEventListener('keydown', this.onKeyDown);
+    this.onKeyDown = undefined;
     this.blink?.remove();
+    this.blink = undefined;
     this.cursor = false;
     this.renderText();
     if (this.scene.input.keyboard) this.scene.input.keyboard.enabled = true;
@@ -86,6 +89,7 @@ export class TextInput {
   clear() { this.buffer = ''; this.renderText(); }
 
   private handleKey(event: KeyboardEvent) {
+    if (this.destroyed) return;
     // 不阻止 Phaser 默认行为以外的全局快捷键
     if (event.key === 'Backspace') {
       this.buffer = this.buffer.slice(0, -1);
@@ -114,14 +118,32 @@ export class TextInput {
   }
 
   private renderText() {
+    // 场景 shutdown 时 Phaser 的 DisplayList 会先于本类 destroy 自动销毁 text，
+    // 这里必须判空/判 active，避免对已销毁的 Text 调用 setText（canvas 已释放 → 崩溃）
+    if (this.destroyed || !this.text || !this.text.active) return;
     const shown = this.buffer + (this.focused && this.cursor ? '_' : '');
     this.text.setText(shown || (this.focused ? '' : this.placeholder));
     this.text.setColor(this.buffer || this.focused ? '#e5e7eb' : '#6b7280');
   }
 
   destroy() {
-    this.blur();
-    this.bg.destroy();
-    this.text.destroy();
+    if (this.destroyed) return;
+    this.destroyed = true;
+
+    // 释放非 Phaser 资源（window 监听、静态计数、键盘开关），不要调用 renderText
+    if (this.focused) {
+      this.focused = false;
+      TextInput.activeCount = Math.max(0, TextInput.activeCount - 1);
+      if (this.onKeyDown) window.removeEventListener('keydown', this.onKeyDown);
+      this.onKeyDown = undefined;
+      if (this.scene.input.keyboard) this.scene.input.keyboard.enabled = true;
+    }
+    this.blink?.remove();
+    this.blink = undefined;
+    this.cursor = false;
+
+    // 仅当对象仍存活时销毁（场景 shutdown 已自动销毁时 active=false，跳过）
+    if (this.bg && this.bg.active) this.bg.destroy();
+    if (this.text && this.text.active) this.text.destroy();
   }
 }
